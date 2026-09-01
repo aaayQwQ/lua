@@ -175,11 +175,12 @@ jobs:
         gcc -m32 -O2 -c -o lvm.o lvm.c
         gcc -m32 -O2 -c -o lzio.o lzio.c
         
-        # 编译 lauxlib（包含 luaL_* 函数）
+        # 编译 lauxlib 和 linit（包含 luaL_* 和 luaL_openlibs）
         gcc -m32 -O2 -c -o lauxlib.o lauxlib.c
+        gcc -m32 -O2 -c -o linit.o linit.c
         
-        # 创建核心库（所有核心对象 + lauxlib 打包成一个 dll）
-        gcc -m32 -O2 -shared -o lua51.dll lapi.o lcode.o ldebug.o ldo.o ldump.o lfunc.o lgc.o llex.o lmem.o lobject.o lopcodes.o lparser.o lstate.o lstring.o ltable.o ltm.o lundump.o lvm.o lzio.o lauxlib.o -lm
+        # 创建核心库（所有核心对象 + lauxlib + linit 打包成一个 dll）
+        gcc -m32 -O2 -shared -o lua51.dll lapi.o lcode.o ldebug.o ldo.o ldump.o lfunc.o lgc.o llex.o lmem.o lobject.o lopcodes.o lparser.o lstate.o lstring.o ltable.o ltm.o lundump.o lvm.o lzio.o lauxlib.o linit.o -lm
         
         # 编译 lua.exe（链接核心 dll）
         gcc -m32 -O2 -c -o lua.o lua.c
