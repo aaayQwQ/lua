@@ -1,4 +1,4 @@
-name: Build Lua 5.1.4 (All Platforms, Pure Static)
+name: Build Lua 5.1.4 (All Platforms, Pure Static, Optimized)
 
 on:
   push:
@@ -13,30 +13,36 @@ jobs:
           curl -fsSL https://www.lua.org/ftp/lua-5.1.4.tar.gz -o lua.tar.gz
           tar -xzf lua.tar.gz
 
-      - name: Setup MinGW
-        run: |
-          choco install mingw -y
-          echo "C:\tools\mingw64\bin" >> $env:GITHUB_PATH
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW32
+          install: |
+            mingw-w64-i686-gcc
+            mingw-w64-i686-binutils
+            make
 
-      - name: Build 32-bit (Win98~Win11)
+      - name: Build 32-bit (Win98~Win11, Optimized)
+        shell: msys2 {0}
         run: |
-          cd lua-5.1.4\src
-          i686-w64-mingw32-gcc -O1 -march=i586 -mtune=generic -static -DNDEBUG -c l*.c
-          i686-w64-mingw32-ar rcs liblua32.a l*.o
-          i686-w64-mingw32-gcc -static -o lua32.exe lua.o -L. -llua32
-          i686-w64-mingw32-gcc -static -o luac32.exe luac.o -L. -llua32
+          cd lua-5.1.4/src
+          gcc -O2 -march=i586 -mtune=generic -static -DNDEBUG -fomit-frame-pointer -fno-stack-protector -c l*.c
+          ar rcs liblua32.a l*.o
+          gcc -O2 -static -s -o lua32.exe lua.o -L. -llua32
+          gcc -O2 -static -s -o luac32.exe luac.o -L. -llua32
           mv liblua32.a ../
           mv lua32.exe ../
           mv luac32.exe ../
           rm -f *.o
 
-      - name: Build 64-bit (Win7~Win11)
+      - name: Build 64-bit (Win7~Win11, Optimized)
+        shell: msys2 {0}
         run: |
-          cd lua-5.1.4\src
-          x86_64-w64-mingw32-gcc -O1 -static -DNDEBUG -c l*.c
-          x86_64-w64-mingw32-ar rcs liblua64.a l*.o
-          x86_64-w64-mingw32-gcc -static -o lua64.exe lua.o -L. -llua64
-          x86_64-w64-mingw32-gcc -static -o luac64.exe luac.o -L. -llua64
+          cd lua-5.1.4/src
+          gcc -O2 -static -DNDEBUG -fomit-frame-pointer -fno-stack-protector -c l*.c
+          ar rcs liblua64.a l*.o
+          gcc -O2 -static -s -o lua64.exe lua.o -L. -llua64
+          gcc -O2 -static -s -o luac64.exe luac.o -L. -llua64
           mv liblua64.a ../
           mv lua64.exe ../
           mv luac64.exe ../
@@ -46,9 +52,9 @@ jobs:
         with:
           name: lua-5.1.4-all-platforms-pure-static
           path: |
-            lua-5.1.4\liblua32.a
-            lua-5.1.4\liblua64.a
-            lua-5.1.4\lua32.exe
-            lua-5.1.4\lua64.exe
-            lua-5.1.4\luac32.exe
-            lua-5.1.4\luac64.exe
+            lua-5.1.4/liblua32.a
+            lua-5.1.4/liblua64.a
+            lua-5.1.4/lua32.exe
+            lua-5.1.4/lua64.exe
+            lua-5.1.4/luac32.exe
+            lua-5.1.4/luac64.exe
