@@ -10,7 +10,7 @@ jobs:
     steps:
       - name: Checkout Lua 5.1.4
         run: |
-          curl -fsSL https://github.com/lua/lua/archive/refs/tags/v5-1-4.tar.gz -o lua.tar.gz
+          curl -fsSL https://www.lua.org/ftp/lua-5.1.4.tar.gz -o lua.tar.gz
           tar -xzf lua.tar.gz
 
       - name: Setup MinGW
@@ -20,7 +20,7 @@ jobs:
 
       - name: Build 32-bit (Win98~Win11)
         run: |
-          cd lua-5-1-4\src
+          cd lua-5.1.4\src
           i686-w64-mingw32-gcc -O1 -march=i586 -mtune=generic -static -DNDEBUG -c l*.c
           i686-w64-mingw32-ar rcs liblua32.a l*.o
           i686-w64-mingw32-gcc -static -o lua32.exe lua.o -L. -llua32
@@ -32,7 +32,7 @@ jobs:
 
       - name: Build 64-bit (Win7~Win11)
         run: |
-          cd lua-5-1-4\src
+          cd lua-5.1.4\src
           x86_64-w64-mingw32-gcc -O1 -static -DNDEBUG -c l*.c
           x86_64-w64-mingw32-ar rcs liblua64.a l*.o
           x86_64-w64-mingw32-gcc -static -o lua64.exe lua.o -L. -llua64
@@ -46,9 +46,9 @@ jobs:
         with:
           name: lua-5.1.4-all-platforms-pure-static
           path: |
-            lua-5-1-4\liblua32.a
-            lua-5-1-4\liblua64.a
-            lua-5-1-4\lua32.exe
-            lua-5-1-4\lua64.exe
-            lua-5-1-4\luac32.exe
-            lua-5-1-4\luac64.exe
+            lua-5.1.4\liblua32.a
+            lua-5.1.4\liblua64.a
+            lua-5.1.4\lua32.exe
+            lua-5.1.4\lua64.exe
+            lua-5.1.4\luac32.exe
+            lua-5.1.4\luac64.exe
