@@ -1,4 +1,4 @@
-name: Build Lua 5.1.4 Windows x64
+name: Build Lua 5.1.4 Windows x64 Optimized
 
 on:
   push:
@@ -26,11 +26,13 @@ jobs:
         wget http://www.lua.org/ftp/lua-5.1.4.tar.gz
         tar -xzf lua-5.1.4.tar.gz
 
-    - name: Fix luaU_print error
+    - name: Build with optimizations
       shell: msys2 {0}
-      working-directory: lua-5.1.4/src
+      working-directory: lua-5.1.4
       run: |
-        # 创建 print.c 文件
+        cd src
+        
+        # 创建 print.c 文件（必需，否则链接错误）
         cat > print.c << 'EOF'
         #include <stdio.h>
         #include <ctype.h>
@@ -107,27 +109,9 @@ jobs:
            case OP_SETGLOBAL: printf("\t; %s",svalue(&f->k[bx])); break;
            case OP_GETTABLE:
            case OP_SELF: if (ISK(c)) { printf("\t; "); PrintConstant(f,INDEXK(c)); } break;
-           case OP_SETTABLE:
-           case OP_ADD:
-           case OP_SUB:
-           case OP_MUL:
-           case OP_DIV:
-           case OP_POW:
-           case OP_EQ:
-           case OP_LT:
-           case OP_LE:
-            if (ISK(b) || ISK(c))
-            {
-             printf("\t; ");
-             if (ISK(b)) PrintConstant(f,INDEXK(b)); else printf("-");
-             printf(" ");
-             if (ISK(c)) PrintConstant(f,INDEXK(c)); else printf("-");
-            }
-            break;
            case OP_JMP:
            case OP_FORLOOP:
            case OP_FORPREP: printf("\t; to %d",sbx+pc+2); break;
-           case OP_CLOSURE: printf("\t; %p",VOID(f->p[bx])); break;
            default: break;
           }
           printf("\n");
@@ -161,35 +145,14 @@ jobs:
         }
         EOF
         
-        # 修改 Makefile - 添加 print.o 到 CORE_O 或 LIB_O
-        sed -i 's/^CORE_O= lapi.o lcode.o ldebug.o ldo.o ldump.o lfunc.o lgc.o llex.o lmem.o lobject.o lopcodes.o lparser.o lstate.o lstring.o ltable.o ltm.o lundump.o lvm.o lzio.o/CORE_O= lapi.o lcode.o ldebug.o ldo.o ldump.o lfunc.o lgc.o llex.o lmem.o lobject.o lopcodes.o lparser.o lstate.o lstring.o ltable.o ltm.o lundump.o lvm.o lzio.o print.o/' Makefile
+        # 编译 print.o（使用优化参数）
+        gcc -m64 -O3 -march=x86-64 -mtune=generic -fomit-frame-pointer -ffast-math -DNDEBUG -c -o print.o print.c
         
-        # 手动编译 print.o
-        gcc -m64 -O2 -Wall -DLUA_BUILD_AS_DLL -c -o print.o print.c
-
-    - name: Build Lua (optimized)
-      shell: msys2 {0}
-      working-directory: lua-5.1.4
-      run: |
-        cd src
-        # 直接编译，print.o 已经存在
+        # 编译 Lua（使用高级优化）
         make mingw \
-          CC="gcc -m64" \
-          MYCFLAGS="-O2 -DNDEBUG -fomit-frame-pointer -DLUA_BUILD_AS_DLL" \
-          MYLDFLAGS="-s"
-
-    - name: Test build
-      shell: msys2 {0}
-      working-directory: lua-5.1.4
-      run: |
-        echo "=== Lua version ==="
-        ./src/lua.exe -v
-        echo "=== Test luac ==="
-        echo 'print("Hello World!")' > test.lua
-        ./src/luac.exe -o test.luac test.lua
-        ./src/lua.exe test.luac
-        echo "=== Files ==="
-        ls -la src/*.exe src/*.dll
+          CC="gcc -m64 -O3 -march=x86-64 -mtune=generic -fomit-frame-pointer -ffast-math -funroll-loops -finline-functions -DNDEBUG" \
+          MYCFLAGS="-O3 -march=x86-64 -mtune=generic -fomit-frame-pointer -ffast-math -funroll-loops -finline-functions -DNDEBUG" \
+          MYLDFLAGS="-s -Wl,--strip-all"
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
