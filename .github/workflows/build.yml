@@ -1,4 +1,4 @@
-name: Build Lua 5.1.4 Core 32-bit
+name: Build Lua 5.1.4 Core 32-bit with Separate DLLs
 
 on:
   push:
@@ -31,7 +31,6 @@ jobs:
       shell: msys2 {0}
       working-directory: lua-5.1.4/src
       run: |
-        # 修改 luaconf.h，将 _longjmp 改为 longjmp
         sed -i 's/_longjmp/longjmp/g' luaconf.h
         sed -i 's/_setjmp/setjmp/g' luaconf.h
 
@@ -151,14 +150,11 @@ jobs:
         }
         EOF
 
-    - name: Build minimal Lua core
+    - name: Build Lua core and libraries
       shell: msys2 {0}
       working-directory: lua-5.1.4/src
       run: |
-        # 编译 print.o
-        gcc -m32 -O2 -c -o print.o print.c
-        
-        # 编译核心对象文件（只保留核心，不包含标准库）
+        # 编译核心对象文件
         gcc -m32 -O2 -c -o lapi.o lapi.c
         gcc -m32 -O2 -c -o lcode.o lcode.c
         gcc -m32 -O2 -c -o ldebug.o ldebug.c
@@ -177,15 +173,50 @@ jobs:
         gcc -m32 -O2 -c -o ltm.o ltm.c
         gcc -m32 -O2 -c -o lundump.o lundump.c
         gcc -m32 -O2 -c -o lvm.o lvm.c
-        gcc -m32 -O2 -c -o lzio.o lzio.o
+        gcc -m32 -O2 -c -o lzio.o lzio.c
         
-        # 编译 lua.exe（只包含核心，不链接标准库）
+        # 创建核心库（所有核心对象打包成一个 dll）
+        gcc -m32 -O2 -shared -o lua51.dll lapi.o lcode.o ldebug.o ldo.o ldump.o lfunc.o lgc.o llex.o lmem.o lobject.o lopcodes.o lparser.o lstate.o lstring.o ltable.o ltm.o lundump.o lvm.o lzio.o -lm
+        
+        # 编译 lua.exe（链接核心 dll，不内置任何库）
         gcc -m32 -O2 -c -o lua.o lua.c
-        gcc -m32 -O2 -o lua.exe lua.o lapi.o lcode.o ldebug.o ldo.o ldump.o lfunc.o lgc.o llex.o lmem.o lobject.o lopcodes.o lparser.o lstate.o lstring.o ltable.o ltm.o lundump.o lvm.o lzio.o -lm
+        gcc -m32 -O2 -o lua.exe lua.o -L. -llua51 -lm
         
         # 编译 luac.exe
+        gcc -m32 -O2 -c -o print.o print.c
         gcc -m32 -O2 -c -o luac.o luac.c
-        gcc -m32 -O2 -o luac.exe luac.o print.o lapi.o lcode.o ldebug.o ldo.o ldump.o lfunc.o lgc.o llex.o lmem.o lobject.o lopcodes.o lparser.o lstate.o lstring.o ltable.o ltm.o lundump.o lvm.o lzio.o -lm
+        gcc -m32 -O2 -o luac.exe luac.o print.o -L. -llua51 -lm
+        
+        # 编译基础库（print 等）
+        gcc -m32 -O2 -shared -o base.dll lbaselib.o -L. -llua51
+        
+        # 编译 package 库（require 功能）
+        gcc -m32 -O2 -c -o loadlib.o loadlib.c
+        gcc -m32 -O2 -shared -o package.dll loadlib.o -L. -llua51
+        
+        # 编译 string 库
+        gcc -m32 -O2 -c -o lstrlib.o lstrlib.c
+        gcc -m32 -O2 -shared -o string.dll lstrlib.o -L. -llua51
+        
+        # 编译 math 库
+        gcc -m32 -O2 -c -o lmathlib.o lmathlib.c
+        gcc -m32 -O2 -shared -o math.dll lmathlib.o -L. -llua51
+        
+        # 编译 table 库
+        gcc -m32 -O2 -c -o ltablib.o ltablib.c
+        gcc -m32 -O2 -shared -o table.dll ltablib.o -L. -llua51
+        
+        # 编译 io 库
+        gcc -m32 -O2 -c -o liolib.o liolib.c
+        gcc -m32 -O2 -shared -o io.dll liolib.o -L. -llua51
+        
+        # 编译 os 库
+        gcc -m32 -O2 -c -o loslib.o loslib.c
+        gcc -m32 -O2 -shared -o os.dll loslib.o -L. -llua51
+        
+        # 编译 debug 库
+        gcc -m32 -O2 -c -o ldblib.o ldblib.c
+        gcc -m32 -O2 -shared -o debug.dll ldblib.o -L. -llua51
 
     - name: Create release zip
       shell: msys2 {0}
@@ -194,6 +225,15 @@ jobs:
         mkdir -p lua-core
         cp src/lua.exe lua-core/
         cp src/luac.exe lua-core/
+        cp src/lua51.dll lua-core/
+        cp src/base.dll lua-core/
+        cp src/package.dll lua-core/
+        cp src/string.dll lua-core/
+        cp src/math.dll lua-core/
+        cp src/table.dll lua-core/
+        cp src/io.dll lua-core/
+        cp src/os.dll lua-core/
+        cp src/debug.dll lua-core/
         cd lua-core
         zip -r ../lua-core-32bit.zip .
 
