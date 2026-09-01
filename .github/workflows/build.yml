@@ -27,6 +27,14 @@ jobs:
         wget http://www.lua.org/ftp/lua-5.1.4.tar.gz
         tar -xzf lua-5.1.4.tar.gz
 
+    - name: Fix luaconf.h for Windows
+      shell: msys2 {0}
+      working-directory: lua-5.1.4/src
+      run: |
+        # 修改 luaconf.h，将 _longjmp 改为 longjmp
+        sed -i 's/_longjmp/longjmp/g' luaconf.h
+        sed -i 's/_setjmp/setjmp/g' luaconf.h
+
     - name: Create print.c for luac
       shell: msys2 {0}
       working-directory: lua-5.1.4/src
@@ -151,25 +159,25 @@ jobs:
         gcc -m32 -O2 -c -o print.o print.c
         
         # 编译核心对象文件（只保留核心，不包含标准库）
-        gcc -m32 -O2 -DLUA_USE_LINUX -c -o lapi.o lapi.c
-        gcc -m32 -O2 -DLUA_USE_LINUX -c -o lcode.o lcode.c
-        gcc -m32 -O2 -DLUA_USE_LINUX -c -o ldebug.o ldebug.c
-        gcc -m32 -O2 -DLUA_USE_LINUX -c -o ldo.o ldo.c
-        gcc -m32 -O2 -DLUA_USE_LINUX -c -o ldump.o ldump.c
-        gcc -m32 -O2 -DLUA_USE_LINUX -c -o lfunc.o lfunc.c
-        gcc -m32 -O2 -DLUA_USE_LINUX -c -o lgc.o lgc.c
-        gcc -m32 -O2 -DLUA_USE_LINUX -c -o llex.o llex.c
-        gcc -m32 -O2 -DLUA_USE_LINUX -c -o lmem.o lmem.c
-        gcc -m32 -O2 -DLUA_USE_LINUX -c -o lobject.o lobject.c
-        gcc -m32 -O2 -DLUA_USE_LINUX -c -o lopcodes.o lopcodes.c
-        gcc -m32 -O2 -DLUA_USE_LINUX -c -o lparser.o lparser.c
-        gcc -m32 -O2 -DLUA_USE_LINUX -c -o lstate.o lstate.c
-        gcc -m32 -O2 -DLUA_USE_LINUX -c -o lstring.o lstring.c
-        gcc -m32 -O2 -DLUA_USE_LINUX -c -o ltable.o ltable.c
-        gcc -m32 -O2 -DLUA_USE_LINUX -c -o ltm.o ltm.c
-        gcc -m32 -O2 -DLUA_USE_LINUX -c -o lundump.o lundump.c
-        gcc -m32 -O2 -DLUA_USE_LINUX -c -o lvm.o lvm.c
-        gcc -m32 -O2 -DLUA_USE_LINUX -c -o lzio.o lzio.c
+        gcc -m32 -O2 -c -o lapi.o lapi.c
+        gcc -m32 -O2 -c -o lcode.o lcode.c
+        gcc -m32 -O2 -c -o ldebug.o ldebug.c
+        gcc -m32 -O2 -c -o ldo.o ldo.c
+        gcc -m32 -O2 -c -o ldump.o ldump.c
+        gcc -m32 -O2 -c -o lfunc.o lfunc.c
+        gcc -m32 -O2 -c -o lgc.o lgc.c
+        gcc -m32 -O2 -c -o llex.o llex.c
+        gcc -m32 -O2 -c -o lmem.o lmem.c
+        gcc -m32 -O2 -c -o lobject.o lobject.c
+        gcc -m32 -O2 -c -o lopcodes.o lopcodes.c
+        gcc -m32 -O2 -c -o lparser.o lparser.c
+        gcc -m32 -O2 -c -o lstate.o lstate.c
+        gcc -m32 -O2 -c -o lstring.o lstring.c
+        gcc -m32 -O2 -c -o ltable.o ltable.c
+        gcc -m32 -O2 -c -o ltm.o ltm.c
+        gcc -m32 -O2 -c -o lundump.o lundump.c
+        gcc -m32 -O2 -c -o lvm.o lvm.c
+        gcc -m32 -O2 -c -o lzio.o lzio.o
         
         # 编译 lua.exe（只包含核心，不链接标准库）
         gcc -m32 -O2 -c -o lua.o lua.c
