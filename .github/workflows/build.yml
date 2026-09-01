@@ -26,7 +26,7 @@ jobs:
         shell: msys2 {0}
         run: |
           cd lua-5.1.4/src
-          gcc -O2 -march=i586 -mtune=generic -static -DNDEBUG -fomit-frame-pointer -fno-stack-protector -c l*.c
+          gcc -O2 -march=i586 -mtune=generic -static -DNDEBUG -DLUA_CORE -fomit-frame-pointer -fno-stack-protector -c l*.c
           ar rcs liblua32.a l*.o
           gcc -O2 -static -s -o lua32.exe lua.o -L. -llua32
           gcc -O2 -static -s -o luac32.exe luac.o -L. -llua32
@@ -39,7 +39,7 @@ jobs:
         shell: msys2 {0}
         run: |
           cd lua-5.1.4/src
-          gcc -O2 -static -DNDEBUG -fomit-frame-pointer -fno-stack-protector -c l*.c
+          gcc -O2 -static -DNDEBUG -DLUA_CORE -fomit-frame-pointer -fno-stack-protector -c l*.c
           ar rcs liblua64.a l*.o
           gcc -O2 -static -s -o lua64.exe lua.o -L. -llua64
           gcc -O2 -static -s -o luac64.exe luac.o -L. -llua64
