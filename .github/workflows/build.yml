@@ -175,12 +175,27 @@ jobs:
         gcc -m32 -O2 -c -o lvm.o lvm.c
         gcc -m32 -O2 -c -o lzio.o lzio.c
         
-        # 编译 lauxlib 和 linit（包含 luaL_* 和 luaL_openlibs）
+        # 编译 lauxlib（包含 luaL_* 函数）
         gcc -m32 -O2 -c -o lauxlib.o lauxlib.c
+        
+        # 编译所有标准库对象文件
+        gcc -m32 -O2 -c -o lbaselib.o lbaselib.c
+        gcc -m32 -O2 -c -o loadlib.o loadlib.c
+        gcc -m32 -O2 -c -o lstrlib.o lstrlib.c
+        gcc -m32 -O2 -c -o lmathlib.o lmathlib.c
+        gcc -m32 -O2 -c -o ltablib.o ltablib.c
+        gcc -m32 -O2 -c -o liolib.o liolib.c
+        gcc -m32 -O2 -c -o loslib.o loslib.c
+        gcc -m32 -O2 -c -o ldblib.o ldblib.c
         gcc -m32 -O2 -c -o linit.o linit.c
         
-        # 创建核心库（所有核心对象 + lauxlib + linit 打包成一个 dll）
-        gcc -m32 -O2 -shared -o lua51.dll lapi.o lcode.o ldebug.o ldo.o ldump.o lfunc.o lgc.o llex.o lmem.o lobject.o lopcodes.o lparser.o lstate.o lstring.o ltable.o ltm.o lundump.o lvm.o lzio.o lauxlib.o linit.o -lm
+        # 创建核心库（核心 + lauxlib + 所有标准库 + linit）
+        gcc -m32 -O2 -shared -o lua51.dll \
+          lapi.o lcode.o ldebug.o ldo.o ldump.o lfunc.o lgc.o llex.o lmem.o \
+          lobject.o lopcodes.o lparser.o lstate.o lstring.o ltable.o ltm.o \
+          lundump.o lvm.o lzio.o lauxlib.o \
+          lbaselib.o loadlib.o lstrlib.o lmathlib.o ltablib.o liolib.o loslib.o ldblib.o linit.o \
+          -lm
         
         # 编译 lua.exe（链接核心 dll）
         gcc -m32 -O2 -c -o lua.o lua.c
@@ -191,36 +206,14 @@ jobs:
         gcc -m32 -O2 -c -o luac.o luac.c
         gcc -m32 -O2 -o luac.exe luac.o print.o -L. -llua51 -lm
         
-        # 编译基础库（print 等）
-        gcc -m32 -O2 -c -o lbaselib.o lbaselib.c
+        # 编译独立的标准库 DLL
         gcc -m32 -O2 -shared -o base.dll lbaselib.o -L. -llua51
-        
-        # 编译 package 库（require 功能）
-        gcc -m32 -O2 -c -o loadlib.o loadlib.c
         gcc -m32 -O2 -shared -o package.dll loadlib.o -L. -llua51
-        
-        # 编译 string 库
-        gcc -m32 -O2 -c -o lstrlib.o lstrlib.c
         gcc -m32 -O2 -shared -o string.dll lstrlib.o -L. -llua51
-        
-        # 编译 math 库
-        gcc -m32 -O2 -c -o lmathlib.o lmathlib.c
         gcc -m32 -O2 -shared -o math.dll lmathlib.o -L. -llua51
-        
-        # 编译 table 库
-        gcc -m32 -O2 -c -o ltablib.o ltablib.c
         gcc -m32 -O2 -shared -o table.dll ltablib.o -L. -llua51
-        
-        # 编译 io 库
-        gcc -m32 -O2 -c -o liolib.o liolib.c
         gcc -m32 -O2 -shared -o io.dll liolib.o -L. -llua51
-        
-        # 编译 os 库
-        gcc -m32 -O2 -c -o loslib.o loslib.c
         gcc -m32 -O2 -shared -o os.dll loslib.o -L. -llua51
-        
-        # 编译 debug 库
-        gcc -m32 -O2 -c -o ldblib.o ldblib.c
         gcc -m32 -O2 -shared -o debug.dll ldblib.o -L. -llua51
 
     - name: Create release zip
