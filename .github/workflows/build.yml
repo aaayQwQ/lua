@@ -1,244 +1,201 @@
-name: Build Lua 5.1.4 (64-bit optimized)
+name: Build Lua 5.1.4 Windows x64
 
 on:
   push:
   workflow_dispatch:
 
 jobs:
-  build-lua:
+  build:
     runs-on: windows-latest
-
+    
     steps:
-      - name: Setup MSYS2 (MinGW-w64)
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: MINGW64
-          update: true
-          install: >-
-            mingw-w64-x86_64-gcc
-            make
-            wget
-            tar
+    - name: Setup MSYS2
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: MINGW64
+        update: true
+        install: >-
+          mingw-w64-x86_64-gcc
+          make
+          wget
+          tar
 
-      - name: Download Lua 5.1.4 source
-        shell: msys2 {0}
-        run: |
-          # 下载 Lua 5.1.4 源码
-          wget http://www.lua.org/ftp/lua-5.1.4.tar.gz
-          tar -xzf lua-5.1.4.tar.gz
-          ls -la lua-5.1.4/
+    - name: Download Lua 5.1.4
+      shell: msys2 {0}
+      run: |
+        wget http://www.lua.org/ftp/lua-5.1.4.tar.gz
+        tar -xzf lua-5.1.4.tar.gz
 
-      - name: Fix luaU_print link error
-        shell: msys2 {0}
-        working-directory: lua-5.1.4/src
-        run: |
-          # 创建缺失的 print.c 文件（包含 luaU_print 实现）
-          cat > print.c << 'EOF'
-          #include <stdio.h>
-          #include <ctype.h>
-
-          #include "ldebug.h"
-          #include "lobject.h"
-          #include "lopcodes.h"
-          #include "lundump.h"
-
-          #define Sizeof(x) ((int)sizeof(x))
-          #define VOID(p) ((void*)(p))
-
-          static void PrintString(const TString* ts)
+    - name: Fix luaU_print error
+      shell: msys2 {0}
+      working-directory: lua-5.1.4/src
+      run: |
+        # 创建 print.c 文件
+        cat > print.c << 'EOF'
+        #include <stdio.h>
+        #include <ctype.h>
+        #include "ldebug.h"
+        #include "lobject.h"
+        #include "lopcodes.h"
+        #include "lundump.h"
+        
+        #define VOID(p) ((void*)(p))
+        
+        static void PrintString(const TString* ts)
+        {
+         const char* s=getstr(ts);
+         size_t i,n=ts->tsv.len;
+         putchar('"');
+         for (i=0;i<n;i++)
+         {
+          int c=s[i];
+          switch (c)
           {
-           const char* s=getstr(ts);
-           size_t i,n=ts->tsv.len;
-           putchar('"');
-           for (i=0;i<n;i++)
-           {
-            int c=s[i];
-            switch (c)
+           case '"': printf("\\\""); break;
+           case '\\': printf("\\\\"); break;
+           case '\n': printf("\\n"); break;
+           case '\r': printf("\\r"); break;
+           case '\t': printf("\\t"); break;
+           default:
+            if (isprint((unsigned char)c)) putchar(c);
+            else printf("\\%03u",(unsigned char)c);
+          }
+         }
+         putchar('"');
+        }
+        
+        static void PrintConstant(const Proto* f, int i)
+        {
+         const TValue* o=&f->k[i];
+         switch (ttype(o))
+         {
+          case LUA_TNIL: printf("nil"); break;
+          case LUA_TBOOLEAN: printf(bvalue(o) ? "true" : "false"); break;
+          case LUA_TNUMBER: printf(LUA_NUMBER_FMT,nvalue(o)); break;
+          case LUA_TSTRING: PrintString(rawtsvalue(o)); break;
+          default: printf("? type=%d",ttype(o)); break;
+         }
+        }
+        
+        static void PrintCode(const Proto* f)
+        {
+         const Instruction* code=f->code;
+         int pc,n=f->sizecode;
+         for (pc=0; pc<n; pc++)
+         {
+          Instruction i=code[pc];
+          OpCode o=GET_OPCODE(i);
+          int a=GETARG_A(i);
+          int b=GETARG_B(i);
+          int c=GETARG_C(i);
+          int bx=GETARG_Bx(i);
+          int sbx=GETARG_sBx(i);
+          int line=getline(f,pc);
+          printf("\t%d\t",pc+1);
+          if (line>0) printf("[%d]\t",line); else printf("[-]\t");
+          printf("%-9s\t",luaP_opnames[o]);
+          switch (getOpMode(o))
+          {
+           case iABC: printf("%d",a); if (getBMode(o)!=OpArgN) printf(" %d",ISK(b)?(-1-INDEXK(b)):b); if (getCMode(o)!=OpArgN) printf(" %d",ISK(c)?(-1-INDEXK(c)):c); break;
+           case iABx: if (getBMode(o)==OpArgK) printf("%d %d",a,-1-bx); else printf("%d %d",a,bx); break;
+           case iAsBx: if (o==OP_JMP) printf("%d",sbx); else printf("%d %d",a,sbx); break;
+          }
+          switch (o)
+          {
+           case OP_LOADK: printf("\t; "); PrintConstant(f,bx); break;
+           case OP_GETGLOBAL:
+           case OP_SETGLOBAL: printf("\t; %s",svalue(&f->k[bx])); break;
+           case OP_GETTABLE:
+           case OP_SELF: if (ISK(c)) { printf("\t; "); PrintConstant(f,INDEXK(c)); } break;
+           case OP_SETTABLE:
+           case OP_ADD:
+           case OP_SUB:
+           case OP_MUL:
+           case OP_DIV:
+           case OP_POW:
+           case OP_EQ:
+           case OP_LT:
+           case OP_LE:
+            if (ISK(b) || ISK(c))
             {
-             case '"': printf("\\\""); break;
-             case '\\': printf("\\\\"); break;
-             case '\a': printf("\\a"); break;
-             case '\b': printf("\\b"); break;
-             case '\f': printf("\\f"); break;
-             case '\n': printf("\\n"); break;
-             case '\r': printf("\\r"); break;
-             case '\t': printf("\\t"); break;
-             case '\v': printf("\\v"); break;
-             default:	
-              if (isprint((unsigned char)c))
-               putchar(c);
-              else
-               printf("\\%03u",(unsigned char)c);
+             printf("\t; ");
+             if (ISK(b)) PrintConstant(f,INDEXK(b)); else printf("-");
+             printf(" ");
+             if (ISK(c)) PrintConstant(f,INDEXK(c)); else printf("-");
             }
-           }
-           putchar('"');
+            break;
+           case OP_JMP:
+           case OP_FORLOOP:
+           case OP_FORPREP: printf("\t; to %d",sbx+pc+2); break;
+           case OP_CLOSURE: printf("\t; %p",VOID(f->p[bx])); break;
+           default: break;
           }
+          printf("\n");
+         }
+        }
+        
+        static void PrintHeader(const Proto* f)
+        {
+         const char* s=getstr(f->source);
+         if (*s=='@' || *s=='=') s++;
+         else if (*s==LUA_SIGNATURE[0]) s="(bstring)";
+         else s="(string)";
+         printf("\n%s <%s:%d,%d> (%d instructions at %p)\n",
+          (f->linedefined==0)?"main":"function",s,
+          f->linedefined,f->lastlinedefined,f->sizecode,VOID(f));
+         printf("%d%s params, %d slots, %d upvalues, ",
+          f->numparams,f->is_vararg?"+":"",f->maxstacksize,f->nups);
+         printf("%d locals, %d constants, %d functions\n",
+          f->sizelocvars,f->sizek,f->sizep);
+        }
+        
+        void luaU_print(const Proto* f, int full)
+        {
+         int i,n=f->sizep;
+         PrintHeader(f);
+         PrintCode(f);
+         if (full)
+         {
+          for (i=0; i<n; i++) luaU_print(f->p[i],full);
+         }
+        }
+        EOF
+        
+        # 修改 Makefile - 添加 print.o 到 CORE_O 或 LIB_O
+        sed -i 's/^CORE_O= lapi.o lcode.o ldebug.o ldo.o ldump.o lfunc.o lgc.o llex.o lmem.o lobject.o lopcodes.o lparser.o lstate.o lstring.o ltable.o ltm.o lundump.o lvm.o lzio.o/CORE_O= lapi.o lcode.o ldebug.o ldo.o ldump.o lfunc.o lgc.o llex.o lmem.o lobject.o lopcodes.o lparser.o lstate.o lstring.o ltable.o ltm.o lundump.o lvm.o lzio.o print.o/' Makefile
+        
+        # 手动编译 print.o
+        gcc -m64 -O2 -Wall -DLUA_BUILD_AS_DLL -c -o print.o print.c
 
-          static void PrintConstant(const Proto* f, int i)
-          {
-           const TValue* o=&f->k[i];
-           switch (ttype(o))
-           {
-            case LUA_TNIL:
-             printf("nil");
-             break;
-            case LUA_TBOOLEAN:
-             printf(bvalue(o) ? "true" : "false");
-             break;
-            case LUA_TNUMBER:
-             printf(LUA_NUMBER_FMT,nvalue(o));
-             break;
-            case LUA_TSTRING:
-             PrintString(rawtsvalue(o));
-             break;
-            default:
-             printf("? type=%d",ttype(o));
-             break;
-           }
-          }
+    - name: Build Lua (optimized)
+      shell: msys2 {0}
+      working-directory: lua-5.1.4
+      run: |
+        cd src
+        # 直接编译，print.o 已经存在
+        make mingw \
+          CC="gcc -m64" \
+          MYCFLAGS="-O2 -DNDEBUG -fomit-frame-pointer -DLUA_BUILD_AS_DLL" \
+          MYLDFLAGS="-s"
 
-          static void PrintCode(const Proto* f)
-          {
-           const Instruction* code=f->code;
-           int pc,n=f->sizecode;
-           for (pc=0; pc<n; pc++)
-           {
-            Instruction i=code[pc];
-            OpCode o=GET_OPCODE(i);
-            int a=GETARG_A(i);
-            int b=GETARG_B(i);
-            int c=GETARG_C(i);
-            int bx=GETARG_Bx(i);
-            int sbx=GETARG_sBx(i);
-            int line=getline(f,pc);
-            printf("\t%d\t",pc+1);
-            if (line>0) printf("[%d]\t",line); else printf("[-]\t");
-            printf("%-9s\t",luaP_opnames[o]);
-            switch (getOpMode(o))
-            {
-             case iABC: printf("%d",a); if (getBMode(o)!=OpArgN) printf(" %d",ISK(b)?(-1-INDEXK(b)):b); if (getCMode(o)!=OpArgN) printf(" %d",ISK(c)?(-1-INDEXK(c)):c); break;
-             case iABx: if (getBMode(o)==OpArgK) printf("%d %d",a,-1-bx); else printf("%d %d",a,bx); break;
-             case iAsBx: if (o==OP_JMP) printf("%d",sbx); else printf("%d %d",a,sbx); break;
-            }
-            switch (o)
-            {
-             case OP_LOADK:
-              printf("\t; "); PrintConstant(f,bx);
-              break;
-             case OP_GETUPVAL:
-             case OP_SETUPVAL:
-              printf("\t; %s", (f->sizeupvalues>0) ? getstr(f->upvalues[b]) : "-");
-              break;
-             case OP_GETGLOBAL:
-             case OP_SETGLOBAL:
-              printf("\t; %s",svalue(&f->k[bx]));
-              break;
-             case OP_GETTABLE:
-             case OP_SELF:
-              if (ISK(c)) { printf("\t; "); PrintConstant(f,INDEXK(c)); }
-              break;
-             case OP_SETTABLE:
-             case OP_ADD:
-             case OP_SUB:
-             case OP_MUL:
-             case OP_DIV:
-             case OP_POW:
-             case OP_EQ:
-             case OP_LT:
-             case OP_LE:
-              if (ISK(b) || ISK(c))
-              {
-               printf("\t; ");
-               if (ISK(b)) PrintConstant(f,INDEXK(b)); else printf("-");
-               printf(" ");
-               if (ISK(c)) PrintConstant(f,INDEXK(c)); else printf("-");
-              }
-              break;
-             case OP_JMP:
-             case OP_FORLOOP:
-             case OP_FORPREP:
-              printf("\t; to %d",sbx+pc+2);
-              break;
-             case OP_CLOSURE:
-              printf("\t; %p",VOID(f->p[bx]));
-              break;
-             case OP_SETLIST:
-              if (c==0) printf("\t; %d",GETARG_Ax(code[pc+1]));
-              else printf("\t; %d",c);
-              break;
-             default: break;
-            }
-            printf("\n");
-           }
-          }
+    - name: Test build
+      shell: msys2 {0}
+      working-directory: lua-5.1.4
+      run: |
+        echo "=== Lua version ==="
+        ./src/lua.exe -v
+        echo "=== Test luac ==="
+        echo 'print("Hello World!")' > test.lua
+        ./src/luac.exe -o test.luac test.lua
+        ./src/lua.exe test.luac
+        echo "=== Files ==="
+        ls -la src/*.exe src/*.dll
 
-          static void PrintHeader(const Proto* f)
-          {
-           const char* s=getstr(f->source);
-           if (*s=='@' || *s=='=')
-            s++;
-           else if (*s==LUA_SIGNATURE[0])
-            s="(bstring)";
-           else
-            s="(string)";
-           printf("\n%s <%s:%d,%d> (%d instructions, %d bytes at %p)\n",
-            (f->linedefined==0)?"main":"function",s,
-            f->linedefined,f->lastlinedefined,
-            f->sizecode,f->sizecode*sizeof(Instruction),VOID(f));
-           printf("%d%s params, %d slots, %d upvalues, ",
-            f->numparams,f->is_vararg?"+":"",f->maxstacksize,f->nups);
-           printf("%d locals, %d constants, %d functions\n",
-            f->sizelocvars,f->sizek,f->sizep);
-          }
-
-          void luaU_print(const Proto* f, int full)
-          {
-           int i,n=f->sizep;
-           PrintHeader(f);
-           PrintCode(f);
-           if (full)
-           {
-            for (i=0; i<n; i++) luaU_print(f->p[i],full);
-           }
-          }
-          EOF
-
-          # 修改 Makefile，确保 luac 包含 print.o
-          sed -i 's/luac: luac.o luac.o/luac: luac.o print.o/' Makefile
-          # 如果上面没匹配到，手动检查并修改
-          if ! grep -q "luac: luac.o print.o" Makefile; then
-            sed -i 's/luac: luac.o/luac: luac.o print.o/' Makefile
-          fi
-
-      - name: Build Lua (64-bit optimized)
-        shell: msys2 {0}
-        working-directory: lua-5.1.4
-        run: |
-          # 编译优化版本，不使用 debug
-          make mingw \
-            CC="gcc -m64" \
-            MYCFLAGS="-O2 -DNDEBUG -fomit-frame-pointer" \
-            MYLDFLAGS="-s"
-
-      - name: Check build results
-        shell: msys2 {0}
-        working-directory: lua-5.1.4
-        run: |
-          echo "=== Build artifacts ==="
-          ls -la src/lua.exe src/luac.exe src/lua51.dll 2>/dev/null || echo "Some files missing"
-          echo "=== Test Lua ==="
-          src/lua.exe -v
-          echo "=== Test LuaC ==="
-          echo 'print("Hello from Lua 5.1.4!")' > test.lua
-          src/luac.exe -o test.luac test.lua
-          src/lua.exe test.luac
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: lua-5.1.4-win64-optimized
-          path: |
-            lua-5.1.4/src/lua.exe
-            lua-5.1.4/src/luac.exe
-            lua-5.1.4/src/lua51.dll
-            lua-5.1.4/src/lua.lib
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: lua-5.1.4-win64-optimized
+        path: |
+          lua-5.1.4/src/lua.exe
+          lua-5.1.4/src/luac.exe
+          lua-5.1.4/src/lua51.dll
