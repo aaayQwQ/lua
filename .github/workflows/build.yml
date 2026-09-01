@@ -26,7 +26,9 @@ jobs:
         shell: msys2 {0}
         run: |
           cd lua-5.1.4/src
-          gcc -O2 -march=i586 -mtune=generic -static -DNDEBUG -DLUA_CORE -fomit-frame-pointer -fno-stack-protector -c l*.c
+          # 修复 luaU_print 链接问题
+          sed -i 's/static void luaU_print/void luaU_print/' lundump.c
+          gcc -O2 -march=i586 -mtune=generic -static -DNDEBUG -fomit-frame-pointer -fno-stack-protector -c l*.c
           ar rcs liblua32.a l*.o
           gcc -O2 -static -s -o lua32.exe lua.o -L. -llua32
           gcc -O2 -static -s -o luac32.exe luac.o -L. -llua32
@@ -39,7 +41,9 @@ jobs:
         shell: msys2 {0}
         run: |
           cd lua-5.1.4/src
-          gcc -O2 -static -DNDEBUG -DLUA_CORE -fomit-frame-pointer -fno-stack-protector -c l*.c
+          # 同样需要修改（因为每次构建都是独立目录）
+          sed -i 's/static void luaU_print/void luaU_print/' lundump.c
+          gcc -O2 -static -DNDEBUG -fomit-frame-pointer -fno-stack-protector -c l*.c
           ar rcs liblua64.a l*.o
           gcc -O2 -static -s -o lua64.exe lua.o -L. -llua64
           gcc -O2 -static -s -o luac64.exe luac.o -L. -llua64
