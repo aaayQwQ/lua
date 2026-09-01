@@ -1,4 +1,4 @@
-name: Build Lua 5.1.4 Core 32-bit with Separate DLLs
+name: Build Lua 5.1.4 x64 Standard
 
 on:
   push:
@@ -12,14 +12,13 @@ jobs:
     - name: Setup MSYS2
       uses: msys2/setup-msys2@v2
       with:
-        msystem: MINGW32
+        msystem: MINGW64
         update: true
         install: >-
-          mingw-w64-i686-gcc
+          mingw-w64-x86_64-gcc
           make
           wget
           tar
-          zip
 
     - name: Download Lua 5.1.4
       shell: msys2 {0}
@@ -150,93 +149,73 @@ jobs:
         }
         EOF
 
-    - name: Build Lua core and libraries
+    - name: Build Lua x64
       shell: msys2 {0}
       working-directory: lua-5.1.4/src
       run: |
         # 编译核心对象文件
-        gcc -m32 -O2 -c -o lapi.o lapi.c
-        gcc -m32 -O2 -c -o lcode.o lcode.c
-        gcc -m32 -O2 -c -o ldebug.o ldebug.c
-        gcc -m32 -O2 -c -o ldo.o ldo.c
-        gcc -m32 -O2 -c -o ldump.o ldump.c
-        gcc -m32 -O2 -c -o lfunc.o lfunc.c
-        gcc -m32 -O2 -c -o lgc.o lgc.c
-        gcc -m32 -O2 -c -o llex.o llex.c
-        gcc -m32 -O2 -c -o lmem.o lmem.c
-        gcc -m32 -O2 -c -o lobject.o lobject.c
-        gcc -m32 -O2 -c -o lopcodes.o lopcodes.c
-        gcc -m32 -O2 -c -o lparser.o lparser.c
-        gcc -m32 -O2 -c -o lstate.o lstate.c
-        gcc -m32 -O2 -c -o lstring.o lstring.c
-        gcc -m32 -O2 -c -o ltable.o ltable.c
-        gcc -m32 -O2 -c -o ltm.o ltm.c
-        gcc -m32 -O2 -c -o lundump.o lundump.c
-        gcc -m32 -O2 -c -o lvm.o lvm.c
-        gcc -m32 -O2 -c -o lzio.o lzio.c
+        gcc -m64 -O2 -c -o lapi.o lapi.c
+        gcc -m64 -O2 -c -o lcode.o lcode.c
+        gcc -m64 -O2 -c -o ldebug.o ldebug.c
+        gcc -m64 -O2 -c -o ldo.o ldo.c
+        gcc -m64 -O2 -c -o ldump.o ldump.c
+        gcc -m64 -O2 -c -o lfunc.o lfunc.c
+        gcc -m64 -O2 -c -o lgc.o lgc.c
+        gcc -m64 -O2 -c -o llex.o llex.c
+        gcc -m64 -O2 -c -o lmem.o lmem.c
+        gcc -m64 -O2 -c -o lobject.o lobject.c
+        gcc -m64 -O2 -c -o lopcodes.o lopcodes.c
+        gcc -m64 -O2 -c -o lparser.o lparser.c
+        gcc -m64 -O2 -c -o lstate.o lstate.c
+        gcc -m64 -O2 -c -o lstring.o lstring.c
+        gcc -m64 -O2 -c -o ltable.o ltable.c
+        gcc -m64 -O2 -c -o ltm.o ltm.c
+        gcc -m64 -O2 -c -o lundump.o lundump.c
+        gcc -m64 -O2 -c -o lvm.o lvm.c
+        gcc -m64 -O2 -c -o lzio.o lzio.c
         
-        # 编译 lauxlib（包含 luaL_* 函数）
-        gcc -m32 -O2 -c -o lauxlib.o lauxlib.c
+        # 编译 lauxlib
+        gcc -m64 -O2 -c -o lauxlib.o lauxlib.c
         
-        # 编译所有标准库对象文件
-        gcc -m32 -O2 -c -o lbaselib.o lbaselib.c
-        gcc -m32 -O2 -c -o loadlib.o loadlib.c
-        gcc -m32 -O2 -c -o lstrlib.o lstrlib.c
-        gcc -m32 -O2 -c -o lmathlib.o lmathlib.c
-        gcc -m32 -O2 -c -o ltablib.o ltablib.c
-        gcc -m32 -O2 -c -o liolib.o liolib.c
-        gcc -m32 -O2 -c -o loslib.o loslib.c
-        gcc -m32 -O2 -c -o ldblib.o ldblib.c
-        gcc -m32 -O2 -c -o linit.o linit.c
+        # 编译所有标准库
+        gcc -m64 -O2 -c -o lbaselib.o lbaselib.c
+        gcc -m64 -O2 -c -o loadlib.o loadlib.c
+        gcc -m64 -O2 -c -o lstrlib.o lstrlib.c
+        gcc -m64 -O2 -c -o lmathlib.o lmathlib.c
+        gcc -m64 -O2 -c -o ltablib.o ltablib.c
+        gcc -m64 -O2 -c -o liolib.o liolib.c
+        gcc -m64 -O2 -c -o loslib.o loslib.c
+        gcc -m64 -O2 -c -o ldblib.o ldblib.c
+        gcc -m64 -O2 -c -o linit.o linit.c
         
-        # 创建核心库（核心 + lauxlib + 所有标准库 + linit）
-        gcc -m32 -O2 -shared -o lua51.dll \
+        # 创建 lua51.dll（包含所有标准库）
+        gcc -m64 -O2 -shared -static-libgcc -o lua51.dll \
           lapi.o lcode.o ldebug.o ldo.o ldump.o lfunc.o lgc.o llex.o lmem.o \
           lobject.o lopcodes.o lparser.o lstate.o lstring.o ltable.o ltm.o \
           lundump.o lvm.o lzio.o lauxlib.o \
           lbaselib.o loadlib.o lstrlib.o lmathlib.o ltablib.o liolib.o loslib.o ldblib.o linit.o \
           -lm
         
-        # 编译 lua.exe（链接核心 dll）
-        gcc -m32 -O2 -c -o lua.o lua.c
-        gcc -m32 -O2 -o lua.exe lua.o -L. -llua51 -lm
+        # 编译 lua.exe
+        gcc -m64 -O2 -c -o lua.o lua.c
+        gcc -m64 -O2 -static-libgcc -o lua.exe lua.o -L. -llua51 -lm
         
         # 编译 luac.exe
-        gcc -m32 -O2 -c -o print.o print.c
-        gcc -m32 -O2 -c -o luac.o luac.c
-        gcc -m32 -O2 -o luac.exe luac.o print.o -L. -llua51 -lm
-        
-        # 编译独立的标准库 DLL
-        gcc -m32 -O2 -shared -o base.dll lbaselib.o -L. -llua51
-        gcc -m32 -O2 -shared -o package.dll loadlib.o -L. -llua51
-        gcc -m32 -O2 -shared -o string.dll lstrlib.o -L. -llua51
-        gcc -m32 -O2 -shared -o math.dll lmathlib.o -L. -llua51
-        gcc -m32 -O2 -shared -o table.dll ltablib.o -L. -llua51
-        gcc -m32 -O2 -shared -o io.dll liolib.o -L. -llua51
-        gcc -m32 -O2 -shared -o os.dll loslib.o -L. -llua51
-        gcc -m32 -O2 -shared -o debug.dll ldblib.o -L. -llua51
+        gcc -m64 -O2 -c -o print.o print.c
+        gcc -m64 -O2 -c -o luac.o luac.c
+        gcc -m64 -O2 -static-libgcc -o luac.exe luac.o print.o -L. -llua51 -lm
 
-    - name: Create release zip
+    - name: Create release folder
       shell: msys2 {0}
       working-directory: lua-5.1.4
       run: |
-        mkdir -p lua-core
-        cp src/lua.exe lua-core/
-        cp src/luac.exe lua-core/
-        cp src/lua51.dll lua-core/
-        cp src/base.dll lua-core/
-        cp src/package.dll lua-core/
-        cp src/string.dll lua-core/
-        cp src/math.dll lua-core/
-        cp src/table.dll lua-core/
-        cp src/io.dll lua-core/
-        cp src/os.dll lua-core/
-        cp src/debug.dll lua-core/
-        cd lua-core
-        zip -r ../lua-core-32bit.zip .
+        mkdir -p lua-x64
+        cp src/lua.exe lua-x64/
+        cp src/luac.exe lua-x64/
+        cp src/lua51.dll lua-x64/
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: lua-core-32bit
-        path: lua-5.1.4/lua-core-32bit.zip
+        name: lua-5.1.4-x64
+        path: lua-5.1.4/lua-x64/
