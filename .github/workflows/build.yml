@@ -9,13 +9,6 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout Lua 5.1.4 source
-        uses: actions/checkout@v4
-        with:
-          repository: lua/lua
-          ref: v5.1.4
-          path: lua-5.1.4
-
       - name: Setup MSYS2 (MinGW-w64)
         uses: msys2/setup-msys2@v2
         with:
@@ -24,6 +17,16 @@ jobs:
           install: >-
             mingw-w64-x86_64-gcc
             make
+            wget
+            tar
+
+      - name: Download Lua 5.1.4 source
+        shell: msys2 {0}
+        run: |
+          # 下载 Lua 5.1.4 源码
+          wget http://www.lua.org/ftp/lua-5.1.4.tar.gz
+          tar -xzf lua-5.1.4.tar.gz
+          ls -la lua-5.1.4/
 
       - name: Fix luaU_print link error
         shell: msys2 {0}
@@ -200,11 +203,11 @@ jobs:
           }
           EOF
 
-          # 修改 Makefile，添加 print.o 到 luac 的依赖
-          sed -i 's/luac: luac.o print.o $(LUA_O)/luac: luac.o print.o $(LUA_O)/' Makefile
-          # 如果上面没匹配到，手动添加
-          if ! grep -q "print.o" Makefile; then
-            sed -i '/^luac:/s/luac.o/luac.o print.o/' Makefile
+          # 修改 Makefile，确保 luac 包含 print.o
+          sed -i 's/luac: luac.o luac.o/luac: luac.o print.o/' Makefile
+          # 如果上面没匹配到，手动检查并修改
+          if ! grep -q "luac: luac.o print.o" Makefile; then
+            sed -i 's/luac: luac.o/luac: luac.o print.o/' Makefile
           fi
 
       - name: Build Lua (64-bit optimized)
@@ -213,9 +216,22 @@ jobs:
         run: |
           # 编译优化版本，不使用 debug
           make mingw \
-            CC="gcc -m64 -O2 -DNDEBUG" \
-            MYCFLAGS="-O2 -DNDEBUG" \
+            CC="gcc -m64" \
+            MYCFLAGS="-O2 -DNDEBUG -fomit-frame-pointer" \
             MYLDFLAGS="-s"
+
+      - name: Check build results
+        shell: msys2 {0}
+        working-directory: lua-5.1.4
+        run: |
+          echo "=== Build artifacts ==="
+          ls -la src/lua.exe src/luac.exe src/lua51.dll 2>/dev/null || echo "Some files missing"
+          echo "=== Test Lua ==="
+          src/lua.exe -v
+          echo "=== Test LuaC ==="
+          echo 'print("Hello from Lua 5.1.4!")' > test.lua
+          src/luac.exe -o test.luac test.lua
+          src/lua.exe test.luac
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
