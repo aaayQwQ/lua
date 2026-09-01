@@ -1,4 +1,4 @@
-name: Build Lua 5.1.4 x64 Standard
+name: Build Lua 5.1.4 Windows x64
 
 on:
   push:
@@ -19,24 +19,16 @@ jobs:
           make
           wget
           tar
-
     - name: Download Lua 5.1.4
       shell: msys2 {0}
       run: |
         wget http://www.lua.org/ftp/lua-5.1.4.tar.gz
         tar -xzf lua-5.1.4.tar.gz
-
-    - name: Fix luaconf.h for Windows
+    - name: Fix luaU_print error
       shell: msys2 {0}
       working-directory: lua-5.1.4/src
       run: |
-        sed -i 's/_longjmp/longjmp/g' luaconf.h
-        sed -i 's/_setjmp/setjmp/g' luaconf.h
-
-    - name: Create print.c for luac
-      shell: msys2 {0}
-      working-directory: lua-5.1.4/src
-      run: |
+        # 创建 print.c 文件
         cat > print.c << 'EOF'
         #include <stdio.h>
         #include <ctype.h>
@@ -113,9 +105,27 @@ jobs:
            case OP_SETGLOBAL: printf("\t; %s",svalue(&f->k[bx])); break;
            case OP_GETTABLE:
            case OP_SELF: if (ISK(c)) { printf("\t; "); PrintConstant(f,INDEXK(c)); } break;
+           case OP_SETTABLE:
+           case OP_ADD:
+           case OP_SUB:
+           case OP_MUL:
+           case OP_DIV:
+           case OP_POW:
+           case OP_EQ:
+           case OP_LT:
+           case OP_LE:
+            if (ISK(b) || ISK(c))
+            {
+             printf("\t; ");
+             if (ISK(b)) PrintConstant(f,INDEXK(b)); else printf("-");
+             printf(" ");
+             if (ISK(c)) PrintConstant(f,INDEXK(c)); else printf("-");
+            }
+            break;
            case OP_JMP:
            case OP_FORLOOP:
            case OP_FORPREP: printf("\t; to %d",sbx+pc+2); break;
+           case OP_CLOSURE: printf("\t; %p",VOID(f->p[bx])); break;
            default: break;
           }
           printf("\n");
@@ -148,74 +158,39 @@ jobs:
          }
         }
         EOF
-
-    - name: Build Lua x64
-      shell: msys2 {0}
-      working-directory: lua-5.1.4/src
-      run: |
-        # 编译核心对象文件
-        gcc -m64 -O2 -c -o lapi.o lapi.c
-        gcc -m64 -O2 -c -o lcode.o lcode.c
-        gcc -m64 -O2 -c -o ldebug.o ldebug.c
-        gcc -m64 -O2 -c -o ldo.o ldo.c
-        gcc -m64 -O2 -c -o ldump.o ldump.c
-        gcc -m64 -O2 -c -o lfunc.o lfunc.c
-        gcc -m64 -O2 -c -o lgc.o lgc.c
-        gcc -m64 -O2 -c -o llex.o llex.c
-        gcc -m64 -O2 -c -o lmem.o lmem.c
-        gcc -m64 -O2 -c -o lobject.o lobject.c
-        gcc -m64 -O2 -c -o lopcodes.o lopcodes.c
-        gcc -m64 -O2 -c -o lparser.o lparser.c
-        gcc -m64 -O2 -c -o lstate.o lstate.c
-        gcc -m64 -O2 -c -o lstring.o lstring.c
-        gcc -m64 -O2 -c -o ltable.o ltable.c
-        gcc -m64 -O2 -c -o ltm.o ltm.c
-        gcc -m64 -O2 -c -o lundump.o lundump.c
-        gcc -m64 -O2 -c -o lvm.o lvm.c
-        gcc -m64 -O2 -c -o lzio.o lzio.c
         
-        # 编译 lauxlib
-        gcc -m64 -O2 -c -o lauxlib.o lauxlib.c
+        # 修改 Makefile - 添加 print.o 到 CORE_O 或 LIB_O
+        sed -i 's/^CORE_O= lapi.o lcode.o ldebug.o ldo.o ldump.o lfunc.o lgc.o llex.o lmem.o lobject.o lopcodes.o lparser.o lstate.o lstring.o ltable.o ltm.o lundump.o lvm.o lzio.o/CORE_O= lapi.o lcode.o ldebug.o ldo.o ldump.o lfunc.o lgc.o llex.o lmem.o lobject.o lopcodes.o lparser.o lstate.o lstring.o ltable.o ltm.o lundump.o lvm.o lzio.o print.o/' Makefile
         
-        # 编译所有标准库
-        gcc -m64 -O2 -c -o lbaselib.o lbaselib.c
-        gcc -m64 -O2 -c -o loadlib.o loadlib.c
-        gcc -m64 -O2 -c -o lstrlib.o lstrlib.c
-        gcc -m64 -O2 -c -o lmathlib.o lmathlib.c
-        gcc -m64 -O2 -c -o ltablib.o ltablib.c
-        gcc -m64 -O2 -c -o liolib.o liolib.c
-        gcc -m64 -O2 -c -o loslib.o loslib.c
-        gcc -m64 -O2 -c -o ldblib.o ldblib.c
-        gcc -m64 -O2 -c -o linit.o linit.c
-        
-        # 创建 lua51.dll（包含所有标准库）
-        gcc -m64 -O2 -shared -static-libgcc -o lua51.dll \
-          lapi.o lcode.o ldebug.o ldo.o ldump.o lfunc.o lgc.o llex.o lmem.o \
-          lobject.o lopcodes.o lparser.o lstate.o lstring.o ltable.o ltm.o \
-          lundump.o lvm.o lzio.o lauxlib.o \
-          lbaselib.o loadlib.o lstrlib.o lmathlib.o ltablib.o liolib.o loslib.o ldblib.o linit.o \
-          -lm
-        
-        # 编译 lua.exe
-        gcc -m64 -O2 -c -o lua.o lua.c
-        gcc -m64 -O2 -static-libgcc -o lua.exe lua.o -L. -llua51 -lm
-        
-        # 编译 luac.exe
-        gcc -m64 -O2 -c -o print.o print.c
-        gcc -m64 -O2 -c -o luac.o luac.c
-        gcc -m64 -O2 -static-libgcc -o luac.exe luac.o print.o -L. -llua51 -lm
-
-    - name: Create release folder
+        # 手动编译 print.o
+        gcc -m64 -O2 -Wall -DLUA_BUILD_AS_DLL -c -o print.o print.c
+    - name: Build Lua (optimized)
       shell: msys2 {0}
       working-directory: lua-5.1.4
       run: |
-        mkdir -p lua-x64
-        cp src/lua.exe lua-x64/
-        cp src/luac.exe lua-x64/
-        cp src/lua51.dll lua-x64/
-
+        cd src
+        # 直接编译，print.o 已经存在
+        make mingw \
+          CC="gcc -m64" \
+          MYCFLAGS="-O2 -DNDEBUG -fomit-frame-pointer -DLUA_BUILD_AS_DLL" \
+          MYLDFLAGS="-s"
+    - name: Test build
+      shell: msys2 {0}
+      working-directory: lua-5.1.4
+      run: |
+        echo "=== Lua version ==="
+        ./src/lua.exe -v
+        echo "=== Test luac ==="
+        echo 'print("Hello World!")' > test.lua
+        ./src/luac.exe -o test.luac test.lua
+        ./src/lua.exe test.luac
+        echo "=== Files ==="
+        ls -la src/*.exe src/*.dll
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: lua-5.1.4-x64
-        path: lua-5.1.4/lua-x64/
+        name: lua-5.1.4-win64-optimized
+        path: |
+          lua-5.1.4/src/lua.exe
+          lua-5.1.4/src/luac.exe
+          lua-5.1.4/src/lua51.dll
