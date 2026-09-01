@@ -175,10 +175,13 @@ jobs:
         gcc -m32 -O2 -c -o lvm.o lvm.c
         gcc -m32 -O2 -c -o lzio.o lzio.c
         
-        # 创建核心库（所有核心对象打包成一个 dll）
-        gcc -m32 -O2 -shared -o lua51.dll lapi.o lcode.o ldebug.o ldo.o ldump.o lfunc.o lgc.o llex.o lmem.o lobject.o lopcodes.o lparser.o lstate.o lstring.o ltable.o ltm.o lundump.o lvm.o lzio.o -lm
+        # 编译 lauxlib（包含 luaL_* 函数）
+        gcc -m32 -O2 -c -o lauxlib.o lauxlib.c
         
-        # 编译 lua.exe（链接核心 dll，不内置任何库）
+        # 创建核心库（所有核心对象 + lauxlib 打包成一个 dll）
+        gcc -m32 -O2 -shared -o lua51.dll lapi.o lcode.o ldebug.o ldo.o ldump.o lfunc.o lgc.o llex.o lmem.o lobject.o lopcodes.o lparser.o lstate.o lstring.o ltable.o ltm.o lundump.o lvm.o lzio.o lauxlib.o -lm
+        
+        # 编译 lua.exe（链接核心 dll）
         gcc -m32 -O2 -c -o lua.o lua.c
         gcc -m32 -O2 -o lua.exe lua.o -L. -llua51 -lm
         
@@ -188,6 +191,7 @@ jobs:
         gcc -m32 -O2 -o luac.exe luac.o print.o -L. -llua51 -lm
         
         # 编译基础库（print 等）
+        gcc -m32 -O2 -c -o lbaselib.o lbaselib.c
         gcc -m32 -O2 -shared -o base.dll lbaselib.o -L. -llua51
         
         # 编译 package 库（require 功能）
