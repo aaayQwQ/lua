@@ -1,4 +1,4 @@
-name: Build Lua 5.1.4 OpenWrt ARM musl dynamic
+name: Build Lua 5.1.4 portable (bundled musl runtime)
 
 on:
   push:
@@ -12,7 +12,7 @@ jobs:
       - name: Install musl cross toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y make wget tar xz-utils
+          sudo apt-get install -y make wget tar xz-utils file
           wget https://musl.cc/arm-linux-musleabihf-cross.tgz
           tar -xzf arm-linux-musleabihf-cross.tgz
           echo "$PWD/arm-linux-musleabihf-cross/bin" >> $GITHUB_PATH
@@ -42,7 +42,7 @@ jobs:
 
           sed -i 's/^CORE_O= lapi.o lcode.o ldebug.o ldo.o ldump.o lfunc.o lgc.o llex.o lmem.o lobject.o lopcodes.o lparser.o lstate.o lstring.o ltable.o ltm.o lundump.o lvm.o lzio.o/CORE_O= lapi.o lcode.o ldebug.o ldo.o ldump.o lfunc.o lgc.o llex.o lmem.o lobject.o lopcodes.o lparser.o lstate.o lstring.o ltable.o ltm.o lundump.o lvm.o lzio.o print.o/' Makefile
 
-      - name: Build Lua (musl, dynamic)
+      - name: Build Lua (musl, dynamic, rpath=$ORIGIN/lib)
         working-directory: lua-5.1.4/src
         run: |
           CROSS=arm-linux-musleabihf-
@@ -56,19 +56,48 @@ jobs:
             AR="${CROSS}ar rcu" \
             RANLIB="${CROSS}ranlib" \
             MYCFLAGS="$EXTRA_CFLAGS" \
-            MYLDFLAGS="-s"
+            MYLDFLAGS="-s -Wl,-rpath,'\$\$ORIGIN/lib' -Wl,--dynamic-linker=./lib/ld-musl-armhf.so.1"
 
-      - name: Collect
-        working-directory: lua-5.1.4/src
+      - name: Assemble portable package
         run: |
-          mkdir -p /tmp/out
-          cp lua luac /tmp/out/
-          arm-linux-musleabihf-strip /tmp/out/lua
-          arm-linux-musleabihf-strip /tmp/out/luac
-          file /tmp/out/lua || true
+          OUT=lua-5.1.4-portable-armv7
+          mkdir -p $OUT/lib
+          cp lua-5.1.4/src/lua  $OUT/lua
+          cp lua-5.1.4/src/luac $OUT/luac
+          arm-linux-musleabihf-strip $OUT/lua
+          arm-linux-musleabihf-strip $OUT/luac
+
+          # 拷贝 musl 运行时
+          SYSROOT=$(arm-linux-musleabihf-gcc -print-sysroot)
+          cp $SYSROOT/lib/ld-musl-armhf.so.1 $OUT/lib/
+          cp $SYSROOT/lib/libc.so            $OUT/lib/
+          cp $SYSROOT/lib/libm.so            $OUT/lib/ 2>/dev/null || true
+
+          # 启动脚本
+          cat > $OUT/lua.sh << 'SCRIPT'
+          #!/bin/sh
+          DIR=$(cd "$(dirname "$0")" && pwd)
+          exec "$DIR/lib/ld-musl-armhf.so.1" --library-path "$DIR/lib" "$DIR/lua" "$@"
+          SCRIPT
+          chmod +x $OUT/lua.sh
+
+          cat > $OUT/luac.sh << 'SCRIPT'
+          #!/bin/sh
+          DIR=$(cd "$(dirname "$0")" && pwd)
+          exec "$DIR/lib/ld-musl-armhf.so.1" --library-path "$DIR/lib" "$DIR/luac" "$@"
+          SCRIPT
+          chmod +x $OUT/luac.sh
+
+          tar -czf $OUT.tar.gz $OUT
+          echo "=== package contents ==="
+          tar -tzf $OUT.tar.gz
+          echo "=== lua binary info ==="
+          file $OUT/lua
+          echo "=== ldd ==="
+          ldd $OUT/lua || true
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: lua-5.1.4-openwrt-musl-dynamic
-          path: /tmp/out/*
+          name: lua-5.1.4-portable-armv7
+          path: lua-5.1.4-portable-armv7.tar.gz
