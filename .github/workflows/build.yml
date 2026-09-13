@@ -15,12 +15,10 @@ jobs:
             march: armv7-a
             mtune: cortex-a9
             mfpu: neon
-            extra: "-mfpu=neon -mfloat-abi=hard"
           - name: arm_cortex-a9_vfpv3
             march: armv7-a
             mtune: cortex-a9
             mfpu: vfpv3-d16
-            extra: "-mfpu=vfpv3-d16 -mfloat-abi=hard"
 
     name: ${{ matrix.name }}
 
@@ -168,33 +166,32 @@ jobs:
           }
           EOF
 
-          # 把 print.o 加入 CORE_O
           sed -i 's/^CORE_O= lapi.o lcode.o ldebug.o ldo.o ldump.o lfunc.o lgc.o llex.o lmem.o lobject.o lopcodes.o lparser.o lstate.o lstring.o ltable.o ltm.o lundump.o lvm.o lzio.o/CORE_O= lapi.o lcode.o ldebug.o ldo.o ldump.o lfunc.o lgc.o llex.o lmem.o lobject.o lopcodes.o lparser.o lstate.o lstring.o ltable.o ltm.o lundump.o lvm.o lzio.o print.o/' Makefile
 
       - name: Build Lua for ${{ matrix.name }}
         working-directory: lua-5.1.4/src
         run: |
           CROSS=arm-linux-gnueabihf-
-          ARCH_FLAGS="-march=${{ matrix.march }} -mtune=${{ matrix.mtune }} ${{ matrix.extra }}"
-          EXTRA_CFLAGS="-O2 -DNDEBUG -fomit-frame-pointer $ARCH_FLAGS"
+          ARCH_FLAGS="-march=${{ matrix.march }} -mtune=${{ matrix.mtune }} -mfpu=${{ matrix.mfpu }} -mfloat-abi=hard"
+          EXTRA_CFLAGS="-O2 -DNDEBUG -fomit-frame-pointer $ARCH_FLAGS -DLUA_USE_POSIX"
 
           make clean || true
-          make print.o CC="${CROSS}gcc" MYCFLAGS="$EXTRA_CFLAGS"
-          make linux \
+          make print.o CC="${CROSS}gcc" MYCFLAGS="$ARCH_FLAGS"
+          make all \
             CC="${CROSS}gcc" \
             AR="${CROSS}ar rcu" \
             RANLIB="${CROSS}ranlib" \
             MYCFLAGS="$EXTRA_CFLAGS" \
             MYLDFLAGS="-s"
 
-      - name: Rename outputs
+      - name: Rename and strip
         working-directory: lua-5.1.4/src
         run: |
           mkdir -p /tmp/${{ matrix.name }}
           cp lua  /tmp/${{ matrix.name }}/lua
           cp luac /tmp/${{ matrix.name }}/luac
-          arm-linux-gnueabihf-strip /tmp/${{ matrix.name }}/lua || true
-          arm-linux-gnueabihf-strip /tmp/${{ matrix.name }}/luac || true
+          arm-linux-gnueabihf-strip /tmp/${{ matrix.name }}/lua
+          arm-linux-gnueabihf-strip /tmp/${{ matrix.name }}/luac
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
