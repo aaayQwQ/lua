@@ -1,4 +1,4 @@
-name: Build Lua 5.1.4 portable (bundled musl runtime)
+name: Build Lua 5.1.4 portable (bundled musl runtime, armv7)
 
 on:
   push:
@@ -9,17 +9,21 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Install musl cross toolchain
+      - name: Install Bootlin musl toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y make wget tar xz-utils file
-          wget https://musl.cc/arm-linux-musleabihf-cross.tgz
-          tar -xzf arm-linux-musleabihf-cross.tgz
-          echo "$PWD/arm-linux-musleabihf-cross/bin" >> $GITHUB_PATH
+          sudo apt-get install -y make wget tar xz-utils file bzip2
+          wget -q https://toolchains.bootlin.com/downloads/releases/toolchains/armv7-eabihf/tarballs/armv7-eabihf--musl--stable-2023.11-1.tar.bz2
+          tar -xjf armv7-eabihf--musl--stable-2023.11-1.tar.bz2
+          echo "$PWD/armv7-eabihf--musl--stable-2023.11-1/bin" >> $GITHUB_PATH
+
+      - name: Verify toolchain
+        run: |
+          arm-buildroot-linux-musleabihf-gcc --version
 
       - name: Download Lua 5.1.4
         run: |
-          wget http://www.lua.org/ftp/lua-5.1.4.tar.gz
+          wget -q http://www.lua.org/ftp/lua-5.1.4.tar.gz
           tar -xzf lua-5.1.4.tar.gz
 
       - name: Fix luaU_print (print.c)
@@ -45,7 +49,7 @@ jobs:
       - name: Build Lua (musl, dynamic, rpath=$ORIGIN/lib)
         working-directory: lua-5.1.4/src
         run: |
-          CROSS=arm-linux-musleabihf-
+          CROSS=arm-buildroot-linux-musleabihf-
           ARCH_FLAGS="-march=armv7-a -mtune=cortex-a9 -mfpu=vfpv3-d16 -mfloat-abi=hard"
           EXTRA_CFLAGS="-O2 -DNDEBUG -fomit-frame-pointer $ARCH_FLAGS -DLUA_USE_POSIX"
 
@@ -64,14 +68,19 @@ jobs:
           mkdir -p $OUT/lib
           cp lua-5.1.4/src/lua  $OUT/lua
           cp lua-5.1.4/src/luac $OUT/luac
-          arm-linux-musleabihf-strip $OUT/lua
-          arm-linux-musleabihf-strip $OUT/luac
+          arm-buildroot-linux-musleabihf-strip $OUT/lua  || true
+          arm-buildroot-linux-musleabihf-strip $OUT/luac || true
 
-          # 拷贝 musl 运行时
-          SYSROOT=$(arm-linux-musleabihf-gcc -print-sysroot)
-          cp $SYSROOT/lib/ld-musl-armhf.so.1 $OUT/lib/
-          cp $SYSROOT/lib/libc.so            $OUT/lib/
-          cp $SYSROOT/lib/libm.so            $OUT/lib/ 2>/dev/null || true
+          # 拷贝 musl 运行时（从 Bootlin sysroot 里找）
+          SYSROOT=$(arm-buildroot-linux-musleabihf-gcc -print-sysroot)
+          echo "SYSROOT=$SYSROOT"
+          find "$SYSROOT" -name 'ld-musl-armhf.so.1' -exec cp -v {} $OUT/lib/ \;
+          find "$SYSROOT" -name 'libc.so'            -exec cp -v {} $OUT/lib/ \;
+          find "$SYSROOT" -name 'libm.so'            -exec cp -v {} $OUT/lib/ \;
+          find "$SYSROOT" -name 'libdl.so'           -exec cp -v {} $OUT/lib/ \; 2>/dev/null || true
+          find "$SYSROOT" -name 'libpthread.so'      -exec cp -v {} $OUT/lib/ \; 2>/dev/null || true
+
+          ls -la $OUT/lib/
 
           # 启动脚本
           cat > $OUT/lua.sh << 'SCRIPT'
@@ -93,8 +102,8 @@ jobs:
           tar -tzf $OUT.tar.gz
           echo "=== lua binary info ==="
           file $OUT/lua
-          echo "=== ldd ==="
-          ldd $OUT/lua || true
+          echo "=== NEEDED ==="
+          arm-buildroot-linux-musleabihf-readelf -d $OUT/lua | grep -E 'NEEDED|RPATH|RUNPATH|interpreter' || true
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
