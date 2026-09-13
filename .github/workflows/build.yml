@@ -1,4 +1,4 @@
-name: Build Lua 5.1.4 Linux ARM (Cortex-A9)
+name: Build Lua 5.1.4 OpenWrt ARM musl dynamic
 
 on:
   push:
@@ -8,32 +8,21 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    strategy:
-      matrix:
-        include:
-          - name: arm_cortex-a9_neon
-            march: armv7-a
-            mtune: cortex-a9
-            mfpu: neon
-          - name: arm_cortex-a9_vfpv3
-            march: armv7-a
-            mtune: cortex-a9
-            mfpu: vfpv3-d16
-
-    name: ${{ matrix.name }}
-
     steps:
-      - name: Install cross toolchain
+      - name: Install musl cross toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-arm-linux-gnueabihf make wget tar
+          sudo apt-get install -y make wget tar xz-utils
+          wget https://musl.cc/arm-linux-musleabihf-cross.tgz
+          tar -xzf arm-linux-musleabihf-cross.tgz
+          echo "$PWD/arm-linux-musleabihf-cross/bin" >> $GITHUB_PATH
 
       - name: Download Lua 5.1.4
         run: |
           wget http://www.lua.org/ftp/lua-5.1.4.tar.gz
           tar -xzf lua-5.1.4.tar.gz
 
-      - name: Fix luaU_print error (print.c)
+      - name: Fix luaU_print (print.c)
         working-directory: lua-5.1.4/src
         run: |
           cat > print.c << 'EOF'
@@ -43,136 +32,21 @@ jobs:
           #include "lobject.h"
           #include "lopcodes.h"
           #include "lundump.h"
-
           #define VOID(p) ((void*)(p))
-
-          static void PrintString(const TString* ts)
-          {
-           const char* s=getstr(ts);
-           size_t i,n=ts->tsv.len;
-           putchar('"');
-           for (i=0;i<n;i++)
-           {
-            int c=s[i];
-            switch (c)
-            {
-             case '"': printf("\\\""); break;
-             case '\\': printf("\\\\"); break;
-             case '\n': printf("\\n"); break;
-             case '\r': printf("\\r"); break;
-             case '\t': printf("\\t"); break;
-             default:
-              if (isprint((unsigned char)c)) putchar(c);
-              else printf("\\%03u",(unsigned char)c);
-            }
-           }
-           putchar('"');
-          }
-
-          static void PrintConstant(const Proto* f, int i)
-          {
-           const TValue* o=&f->k[i];
-           switch (ttype(o))
-           {
-            case LUA_TNIL: printf("nil"); break;
-            case LUA_TBOOLEAN: printf(bvalue(o) ? "true" : "false"); break;
-            case LUA_TNUMBER: printf(LUA_NUMBER_FMT,nvalue(o)); break;
-            case LUA_TSTRING: PrintString(rawtsvalue(o)); break;
-            default: printf("? type=%d",ttype(o)); break;
-           }
-          }
-
-          static void PrintCode(const Proto* f)
-          {
-           const Instruction* code=f->code;
-           int pc,n=f->sizecode;
-           for (pc=0; pc<n; pc++)
-           {
-            Instruction i=code[pc];
-            OpCode o=GET_OPCODE(i);
-            int a=GETARG_A(i);
-            int b=GETARG_B(i);
-            int c=GETARG_C(i);
-            int bx=GETARG_Bx(i);
-            int sbx=GETARG_sBx(i);
-            int line=getline(f,pc);
-            printf("\t%d\t",pc+1);
-            if (line>0) printf("[%d]\t",line); else printf("[-]\t");
-            printf("%-9s\t",luaP_opnames[o]);
-            switch (getOpMode(o))
-            {
-             case iABC: printf("%d",a); if (getBMode(o)!=OpArgN) printf(" %d",ISK(b)?(-1-INDEXK(b)):b); if (getCMode(o)!=OpArgN) printf(" %d",ISK(c)?(-1-INDEXK(c)):c); break;
-             case iABx: if (getBMode(o)==OpArgK) printf("%d %d",a,-1-bx); else printf("%d %d",a,bx); break;
-             case iAsBx: if (o==OP_JMP) printf("%d",sbx); else printf("%d %d",a,sbx); break;
-            }
-            switch (o)
-            {
-             case OP_LOADK: printf("\t; "); PrintConstant(f,bx); break;
-             case OP_GETGLOBAL:
-             case OP_SETGLOBAL: printf("\t; %s",svalue(&f->k[bx])); break;
-             case OP_GETTABLE:
-             case OP_SELF: if (ISK(c)) { printf("\t; "); PrintConstant(f,INDEXK(c)); } break;
-             case OP_SETTABLE:
-             case OP_ADD:
-             case OP_SUB:
-             case OP_MUL:
-             case OP_DIV:
-             case OP_POW:
-             case OP_EQ:
-             case OP_LT:
-             case OP_LE:
-              if (ISK(b) || ISK(c))
-              {
-               printf("\t; ");
-               if (ISK(b)) PrintConstant(f,INDEXK(b)); else printf("-");
-               printf(" ");
-               if (ISK(c)) PrintConstant(f,INDEXK(c)); else printf("-");
-              }
-              break;
-             case OP_JMP:
-             case OP_FORLOOP:
-             case OP_FORPREP: printf("\t; to %d",sbx+pc+2); break;
-             case OP_CLOSURE: printf("\t; %p",VOID(f->p[bx])); break;
-             default: break;
-            }
-            printf("\n");
-           }
-          }
-
-          static void PrintHeader(const Proto* f)
-          {
-           const char* s=getstr(f->source);
-           if (*s=='@' || *s=='=') s++;
-           else if (*s==LUA_SIGNATURE[0]) s="(bstring)";
-           else s="(string)";
-           printf("\n%s <%s:%d,%d> (%d instructions at %p)\n",
-            (f->linedefined==0)?"main":"function",s,
-            f->linedefined,f->lastlinedefined,f->sizecode,VOID(f));
-           printf("%d%s params, %d slots, %d upvalues, ",
-            f->numparams,f->is_vararg?"+":"",f->maxstacksize,f->nups);
-           printf("%d locals, %d constants, %d functions\n",
-            f->sizelocvars,f->sizek,f->sizep);
-          }
-
-          void luaU_print(const Proto* f, int full)
-          {
-           int i,n=f->sizep;
-           PrintHeader(f);
-           PrintCode(f);
-           if (full)
-           {
-            for (i=0; i<n; i++) luaU_print(f->p[i],full);
-           }
-          }
+          static void PrintString(const TString* ts){const char* s=getstr(ts);size_t i,n=ts->tsv.len;putchar('"');for(i=0;i<n;i++){int c=s[i];switch(c){case '"':printf("\\\"");break;case '\\':printf("\\\\");break;case '\n':printf("\\n");break;case '\r':printf("\\r");break;case '\t':printf("\\t");break;default:if(isprint((unsigned char)c))putchar(c);else printf("\\%03u",(unsigned char)c);}}putchar('"');}
+          static void PrintConstant(const Proto* f,int i){const TValue* o=&f->k[i];switch(ttype(o)){case LUA_TNIL:printf("nil");break;case LUA_TBOOLEAN:printf(bvalue(o)?"true":"false");break;case LUA_TNUMBER:printf(LUA_NUMBER_FMT,nvalue(o));break;case LUA_TSTRING:PrintString(rawtsvalue(o));break;default:printf("? type=%d",ttype(o));break;}}
+          static void PrintCode(const Proto* f){const Instruction* code=f->code;int pc,n=f->sizecode;for(pc=0;pc<n;pc++){Instruction i=code[pc];OpCode o=GET_OPCODE(i);int a=GETARG_A(i);int b=GETARG_B(i);int c=GETARG_C(i);int bx=GETARG_Bx(i);int sbx=GETARG_sBx(i);int line=getline(f,pc);printf("\t%d\t",pc+1);if(line>0)printf("[%d]\t",line);else printf("[-]\t");printf("%-9s\t",luaP_opnames[o]);switch(getOpMode(o)){case iABC:printf("%d",a);if(getBMode(o)!=OpArgN)printf(" %d",ISK(b)?(-1-INDEXK(b)):b);if(getCMode(o)!=OpArgN)printf(" %d",ISK(c)?(-1-INDEXK(c)):c);break;case iABx:if(getBMode(o)==OpArgK)printf("%d %d",a,-1-bx);else printf("%d %d",a,bx);break;case iAsBx:if(o==OP_JMP)printf("%d",sbx);else printf("%d %d",a,sbx);break;}switch(o){case OP_LOADK:printf("\t; ");PrintConstant(f,bx);break;case OP_GETGLOBAL:case OP_SETGLOBAL:printf("\t; %s",svalue(&f->k[bx]));break;case OP_GETTABLE:case OP_SELF:if(ISK(c)){printf("\t; ");PrintConstant(f,INDEXK(c));}break;case OP_SETTABLE:case OP_ADD:case OP_SUB:case OP_MUL:case OP_DIV:case OP_POW:case OP_EQ:case OP_LT:case OP_LE:if(ISK(b)||ISK(c)){printf("\t; ");if(ISK(b))PrintConstant(f,INDEXK(b));else printf("-");printf(" ");if(ISK(c))PrintConstant(f,INDEXK(c));else printf("-");}break;case OP_JMP:case OP_FORLOOP:case OP_FORPREP:printf("\t; to %d",sbx+pc+2);break;case OP_CLOSURE:printf("\t; %p",VOID(f->p[bx]));break;default:break;}printf("\n");}}
+          static void PrintHeader(const Proto* f){const char* s=getstr(f->source);if(*s=='@'||*s=='=')s++;else if(*s==LUA_SIGNATURE[0])s="(bstring)";else s="(string)";printf("\n%s <%s:%d,%d> (%d instructions at %p)\n",(f->linedefined==0)?"main":"function",s,f->linedefined,f->lastlinedefined,f->sizecode,VOID(f));printf("%d%s params, %d slots, %d upvalues, ",f->numparams,f->is_vararg?"+":"",f->maxstacksize,f->nups);printf("%d locals, %d constants, %d functions\n",f->sizelocvars,f->sizek,f->sizep);}
+          void luaU_print(const Proto* f,int full){int i,n=f->sizep;PrintHeader(f);PrintCode(f);if(full){for(i=0;i<n;i++)luaU_print(f->p[i],full);}}
           EOF
 
           sed -i 's/^CORE_O= lapi.o lcode.o ldebug.o ldo.o ldump.o lfunc.o lgc.o llex.o lmem.o lobject.o lopcodes.o lparser.o lstate.o lstring.o ltable.o ltm.o lundump.o lvm.o lzio.o/CORE_O= lapi.o lcode.o ldebug.o ldo.o ldump.o lfunc.o lgc.o llex.o lmem.o lobject.o lopcodes.o lparser.o lstate.o lstring.o ltable.o ltm.o lundump.o lvm.o lzio.o print.o/' Makefile
 
-      - name: Build Lua for ${{ matrix.name }}
+      - name: Build Lua (musl, dynamic)
         working-directory: lua-5.1.4/src
         run: |
-          CROSS=arm-linux-gnueabihf-
-          ARCH_FLAGS="-march=${{ matrix.march }} -mtune=${{ matrix.mtune }} -mfpu=${{ matrix.mfpu }} -mfloat-abi=hard"
+          CROSS=arm-linux-musleabihf-
+          ARCH_FLAGS="-march=armv7-a -mtune=cortex-a9 -mfpu=vfpv3-d16 -mfloat-abi=hard"
           EXTRA_CFLAGS="-O2 -DNDEBUG -fomit-frame-pointer $ARCH_FLAGS -DLUA_USE_POSIX"
 
           make clean || true
@@ -184,17 +58,17 @@ jobs:
             MYCFLAGS="$EXTRA_CFLAGS" \
             MYLDFLAGS="-s"
 
-      - name: Rename and strip
+      - name: Collect
         working-directory: lua-5.1.4/src
         run: |
-          mkdir -p /tmp/${{ matrix.name }}
-          cp lua  /tmp/${{ matrix.name }}/lua
-          cp luac /tmp/${{ matrix.name }}/luac
-          arm-linux-gnueabihf-strip /tmp/${{ matrix.name }}/lua
-          arm-linux-gnueabihf-strip /tmp/${{ matrix.name }}/luac
+          mkdir -p /tmp/out
+          cp lua luac /tmp/out/
+          arm-linux-musleabihf-strip /tmp/out/lua
+          arm-linux-musleabihf-strip /tmp/out/luac
+          file /tmp/out/lua || true
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: lua-5.1.4-linux-${{ matrix.name }}
-          path: /tmp/${{ matrix.name }}/*
+          name: lua-5.1.4-openwrt-musl-dynamic
+          path: /tmp/out/*
